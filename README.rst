@@ -103,7 +103,7 @@ Drop-in replacement for the common ``tarfile`` extraction pattern:
 
     from safetar import safe_extract
 
-    safe_extract("path/to/upload.tar.gz", "/var/uploads/extracted/")
+    safe_extract("path/to/upload.tar.gz", "/var/files/extracted/")
 
 Or use the ``SafeTarFile`` context manager for more control:
 
@@ -115,7 +115,7 @@ Or use the ``SafeTarFile`` context manager for more control:
 
     with SafeTarFile("path/to/upload.tar.gz") as stf:
         print(stf.getnames())
-        stf.extractall("/var/uploads/extracted/")
+        stf.extractall("/var/files/extracted/")
 
 Custom limits
 =============
@@ -135,7 +135,7 @@ Custom limits
         symlink_policy=SymlinkPolicy.RESOLVE_INTERNAL,
         hardlink_policy=HardlinkPolicy.INTERNAL,
     ) as stf:
-        stf.extractall("/var/uploads/extracted/")
+        stf.extractall("/var/files/extracted/")
 
 Security event monitoring
 =========================
@@ -152,7 +152,7 @@ Security event monitoring
     with SafeTarFile(
         "path/to/upload.tar.gz", on_security_event=my_monitor
     ) as stf:
-        stf.extractall("/var/uploads/extracted/")
+        stf.extractall("/var/files/extracted/")
 
 Default limits
 ==============
