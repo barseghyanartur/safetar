@@ -27,15 +27,11 @@ class TestFileSizeLimit:
         ):
             stf.extractall(dest)
 
-    def test_no_partial_file_after_failure(
-        self, large_member_archive, tmp_path
-    ):
+    def test_no_partial_file_after_failure(self, large_member_archive, tmp_path):
         dest = tmp_path / "out"
         dest.mkdir()
         try:
-            with SafeTarFile(
-                large_member_archive, max_file_size=500_000
-            ) as stf:
+            with SafeTarFile(large_member_archive, max_file_size=500_000) as stf:
                 stf.extractall(dest)
         except FileSizeExceededError:
             pass
@@ -46,9 +42,7 @@ class TestFileSizeLimit:
     def test_size_at_limit_passes(self, large_member_archive, tmp_path):
         dest = tmp_path / "out"
         # 2 MiB member — set limit to exactly 2 MiB.
-        with SafeTarFile(
-            large_member_archive, max_file_size=2 * 1024 * 1024
-        ) as stf:
+        with SafeTarFile(large_member_archive, max_file_size=2 * 1024 * 1024) as stf:
             stf.extractall(dest)
         assert (dest / "big.bin").exists()
 
@@ -60,9 +54,7 @@ class TestTotalSizeLimit:
         dest = tmp_path / "out"
         with (
             pytest.raises(TotalSizeExceededError),
-            SafeTarFile(
-                large_member_archive, max_total_size=500_000
-            ) as stf,
+            SafeTarFile(large_member_archive, max_total_size=500_000) as stf,
         ):
             stf.extractall(dest)
 
@@ -109,9 +101,7 @@ class TestCompressionRatioLimit:
 class TestAtomicWrite:
     """Atomic write contract."""
 
-    def test_successful_extraction_creates_file(
-        self, legitimate_archive, tmp_path
-    ):
+    def test_successful_extraction_creates_file(self, legitimate_archive, tmp_path):
         dest = tmp_path / "out"
         with SafeTarFile(legitimate_archive) as stf:
             stf.extractall(dest)
