@@ -18,9 +18,13 @@ the contents of each key file.
    │   └── package.rst
    ├── src
    │   └── safetar
+   │       ├── cli
+   │       │   ├── __init__.py
+   │       │   └── _main.py
    │       ├── tests
    │       │   ├── __init__.py
    │       │   ├── conftest.py
+   │       │   ├── test_cli.py
    │       │   ├── test_guard.py
    │       │   ├── test_integration.py
    │       │   ├── test_sandbox.py
@@ -33,7 +37,9 @@ the contents of each key file.
    │       ├── _sandbox.py
    │       ├── _streamer.py
    │       └── py.typed
+   ├── .coderabbit.yaml
    ├── .coveralls.yml
+   ├── AGENTS.md
    ├── conftest.py
    ├── CONTRIBUTING.rst
    ├── docker-compose.yml
@@ -43,12 +49,26 @@ the contents of each key file.
    ├── README.rst
    └── tox.ini
 
+.coderabbit.yaml
+----------------
+
+.. literalinclude:: ../.coderabbit.yaml
+   :language: yaml
+   :caption: .coderabbit.yaml
+
 .coveralls.yml
 --------------
 
 .. literalinclude:: ../.coveralls.yml
    :language: yaml
    :caption: .coveralls.yml
+
+AGENTS.md
+---------
+
+.. literalinclude:: ../AGENTS.md
+   :language: markdown
+   :caption: AGENTS.md
 
 CONTRIBUTING.rst
 ----------------
@@ -183,6 +203,20 @@ src/safetar/_streamer.py
    :language: python
    :caption: src/safetar/_streamer.py
 
+src/safetar/cli/__init__.py
+---------------------------
+
+.. literalinclude:: ../src/safetar/cli/__init__.py
+   :language: python
+   :caption: src/safetar/cli/__init__.py
+
+src/safetar/cli/_main.py
+------------------------
+
+.. literalinclude:: ../src/safetar/cli/_main.py
+   :language: python
+   :caption: src/safetar/cli/_main.py
+
 src/safetar/tests/__init__.py
 -----------------------------
 
@@ -196,6 +230,13 @@ src/safetar/tests/conftest.py
 .. literalinclude:: ../src/safetar/tests/conftest.py
    :language: python
    :caption: src/safetar/tests/conftest.py
+
+src/safetar/tests/test_cli.py
+-----------------------------
+
+.. literalinclude:: ../src/safetar/tests/test_cli.py
+   :language: python
+   :caption: src/safetar/tests/test_cli.py
 
 src/safetar/tests/test_guard.py
 -------------------------------
