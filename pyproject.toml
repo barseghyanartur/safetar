@@ -2,7 +2,7 @@
 name = "safetar"
 description = "Hardened TAR extraction for Python - secure by default."
 readme = "README.rst"
-version = "0.1"
+version = "0.1.1"
 requires-python = ">=3.10"
 dependencies = []
 authors = [
@@ -34,6 +34,9 @@ keywords = [
     "hardened",
     "safe",
 ]
+
+[project.scripts]
+safetar = "safetar.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/barseghyanartur/safetar/"
