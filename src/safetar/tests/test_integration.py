@@ -215,18 +215,24 @@ class TestRecursiveExtraction:
         assert (dest / "outer_file.txt").exists()
         assert not (dest / "inner.tar.gz").exists()
 
-    def test_recursive_nesting_depth_enforced(self, nested_tar_archive, tmp_path):
-        """max_nesting_depth is enforced on nested archives.
+    def test_recursive_nesting_depth_enforced(
+        self, double_nested_tar_archive, tmp_path
+    ):
+        """max_nesting_depth is enforced on nested archives during extraction.
 
-        When _nesting_depth=2 exceeds max_nesting_depth=1, it should raise.
+        With max_nesting_depth=1, attempting to extract a double-nested archive
+        (depth 0 -> depth 1 -> depth 2) should raise NestingDepthError.
         """
-        with pytest.raises(NestingDepthError):
+        dest = tmp_path / "out"
+        with (
+            pytest.raises(NestingDepthError),
             SafeTarFile(
-                nested_tar_archive,
+                double_nested_tar_archive,
                 recursive=True,
                 max_nesting_depth=1,
-                _nesting_depth=2,
-            )
+            ) as stf,
+        ):
+            stf.extractall(dest)
 
     def test_recursive_safe_extract(self, nested_tar_archive, tmp_path):
         """safe_extract() supports recursive=True via kwargs."""
