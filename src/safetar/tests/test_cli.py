@@ -47,55 +47,101 @@ class TestExtractCommand:
         captured = capsys.readouterr()
         assert "Extracted to" in captured.out
 
-    def test_extract_with_max_file_size(self, simple_archive, tmp_path):
-        """Extract with --max-file-size flag."""
+    def test_extract_with_max_file_size(self, large_member_archive, tmp_path, capsys):
+        """Extract with --max-file-size flag rejects large files by default."""
         dest = tmp_path / "out"
         with patch(
             "sys.argv",
             [
                 "safetar",
                 "extract",
-                str(simple_archive),
+                str(large_member_archive),
                 str(dest),
                 "--max-file-size",
-                "1000",
+                "100",
             ],
         ):
             with pytest.raises(SystemExit) as exc_info:
                 main()
-            assert exc_info.value.code == 0
+            assert exc_info.value.code == 1
 
-        assert (dest / "file1.txt").exists()
+        captured = capsys.readouterr()
+        assert "error:" in captured.err
 
-    def test_extract_with_max_files(self, simple_archive, tmp_path):
-        """Extract with --max-files flag."""
+    def test_extract_with_max_file_size_above_limit(
+        self, large_member_archive, tmp_path, capsys
+    ):
+        """Extract with --max-file-size above threshold passes."""
         dest = tmp_path / "out"
         with patch(
             "sys.argv",
             [
                 "safetar",
                 "extract",
-                str(simple_archive),
+                str(large_member_archive),
+                str(dest),
+                "--max-file-size",
+                "3000000",
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 0
+
+        assert (dest / "big.bin").exists()
+
+    def test_extract_with_max_files(self, many_files_archive, tmp_path, capsys):
+        """Extract with --max-files flag rejects archives with too many entries."""
+        dest = tmp_path / "out"
+        with patch(
+            "sys.argv",
+            [
+                "safetar",
+                "extract",
+                str(many_files_archive),
                 str(dest),
                 "--max-files",
-                "10",
+                "100",
             ],
         ):
             with pytest.raises(SystemExit) as exc_info:
                 main()
-            assert exc_info.value.code == 0
+            assert exc_info.value.code == 1
 
-        assert (dest / "file1.txt").exists()
+        captured = capsys.readouterr()
+        assert "error:" in captured.err
 
-    def test_extract_with_symlink_policy(self, simple_archive, tmp_path):
-        """Extract with --symlink-policy flag."""
+    def test_extract_with_max_files_above_limit(self, many_files_archive, tmp_path):
+        """Extract with --max-files above threshold passes."""
         dest = tmp_path / "out"
         with patch(
             "sys.argv",
             [
                 "safetar",
                 "extract",
-                str(simple_archive),
+                str(many_files_archive),
+                str(dest),
+                "--max-files",
+                "20000",
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 0
+
+        assert (dest / "file_0000.txt").exists()
+
+    def test_extract_with_symlink_policy_reject(
+        self, symlink_with_regular_archive, tmp_path, capsys
+    ):
+        """Extract with --symlink-policy reject fails on symlink entry."""
+        dest = tmp_path / "out"
+        with patch(
+            "sys.argv",
+            [
+                "safetar",
+                "extract",
+                str(symlink_with_regular_archive),
                 str(dest),
                 "--symlink-policy",
                 "reject",
@@ -103,19 +149,43 @@ class TestExtractCommand:
         ):
             with pytest.raises(SystemExit) as exc_info:
                 main()
-            assert exc_info.value.code == 0
+            assert exc_info.value.code == 1
 
-        assert (dest / "file1.txt").exists()
+        captured = capsys.readouterr()
+        assert "error:" in captured.err
 
-    def test_extract_with_recursive_flag(self, simple_archive, tmp_path):
-        """Extract with --recursive flag."""
+    def test_extract_with_symlink_policy_ignore(
+        self, symlink_with_regular_archive, tmp_path
+    ):
+        """Extract with --symlink-policy ignore skips symlinks."""
         dest = tmp_path / "out"
         with patch(
             "sys.argv",
             [
                 "safetar",
                 "extract",
-                str(simple_archive),
+                str(symlink_with_regular_archive),
+                str(dest),
+                "--symlink-policy",
+                "ignore",
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 0
+
+        assert (dest / "readme.txt").exists()
+        assert not (dest / "link.txt").exists()
+
+    def test_extract_with_recursive_flag(self, nested_tar_archive, tmp_path, capsys):
+        """Extract with --recursive flag extracts nested archives."""
+        dest = tmp_path / "out"
+        with patch(
+            "sys.argv",
+            [
+                "safetar",
+                "extract",
+                str(nested_tar_archive),
                 str(dest),
                 "--recursive",
             ],
@@ -124,7 +194,27 @@ class TestExtractCommand:
                 main()
             assert exc_info.value.code == 0
 
-        assert (dest / "file1.txt").exists()
+        assert (dest / "outer_file.txt").exists()
+        assert (dest / "inner" / "inner_file.txt").exists()
+
+    def test_extract_without_recursive_flag(self, nested_tar_archive, tmp_path):
+        """Extract without --recursive flag leaves nested archives as files."""
+        dest = tmp_path / "out"
+        with patch(
+            "sys.argv",
+            [
+                "safetar",
+                "extract",
+                str(nested_tar_archive),
+                str(dest),
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 0
+
+        assert (dest / "outer_file.txt").exists()
+        assert (dest / "inner.tar").exists()
 
     def test_extract_nonexistent_archive(self, tmp_path, capsys):
         """Extract fails with nonexistent archive."""
