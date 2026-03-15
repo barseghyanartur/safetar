@@ -463,16 +463,19 @@ class SafeTarFile:
 
         # ---- Streamer phase: regular file extraction ----
         extract_member_streaming(self._tf, info, dest_path, monitor)
-        self._apply_metadata(info, dest_path)
-        extracted_paths.add(dest_path)
 
         # ---- Check for nested archive and extract recursively ----
+        # Must happen before _apply_metadata so the nested archive is readable
+        # regardless of the container file's final mode/owner.
         self._maybe_extract_nested_archive(
             dest_path,
             base_dir,
             monitor,
             extracted_paths,
         )
+
+        self._apply_metadata(info, dest_path)
+        extracted_paths.add(dest_path)
 
     def _apply_metadata(self, info: tarfile.TarInfo, dest_path: Path) -> None:
         """Apply sanitised permissions, ownership, and timestamps.
@@ -561,7 +564,17 @@ class SafeTarFile:
         (without extension), matching the pattern used by safezip.
         """
         nested_dest = archive_path.parent / _tar_stem(archive_path.name)
-        nested_dest.mkdir(parents=True, exist_ok=True)
+        if nested_dest.exists():
+            if nested_dest.is_dir():
+                pass  # OK - directory already exists
+            else:
+                raise MalformedArchiveError(
+                    f"Nested archive {archive_path.name!r} conflicts with "
+                    f"existing non-directory {nested_dest}. "
+                    "Archive may be malformed."
+                )
+        else:
+            nested_dest.mkdir(parents=True, exist_ok=False)
 
         try:
             nested_stf = SafeTarFile(
