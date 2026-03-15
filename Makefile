@@ -1,7 +1,7 @@
 .PHONY: build test test-env shell shell-env \
         doc8 ruff mypy clean-dev clean-test clean pre-commit
 
-VERSION := 0.1
+VERSION := 0.1.1
 SHELL := /bin/bash
 # Makefile for project
 VENV := .venv/bin/activate
@@ -21,10 +21,10 @@ list-envs: build
 test: build
 	docker compose run --rm tox
 
-# Usage: make docker-test-env ENV=py312
+# Usage: make test-env ENV=py312
 test-env: build
 	@if [ -z "$(ENV)" ]; then \
-		echo "Usage: make docker-test-env ENV=py312"; \
+		echo "Usage: make test-env ENV=py312"; \
 		exit 1; \
 	fi
 	docker compose run --rm tox -e $(ENV)
@@ -32,10 +32,10 @@ test-env: build
 shell: build
 	docker compose run --rm --entrypoint bash tox
 
-# Usage: make docker-shell-env ENV=py312
+# Usage: make shell-env ENV=py312
 shell-env: build
 	@if [ -z "$(ENV)" ]; then \
-		echo "Usage: make docker-shell-env ENV=py312"; \
+		echo "Usage: make shell-env ENV=py312"; \
 		exit 1; \
 	fi
 	docker compose run --rm --entrypoint bash tox -e $(ENV)

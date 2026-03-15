@@ -437,3 +437,81 @@ def legitimate_gz_archive(tmp_path):
     tar_data = _tar_bytes(build)
     gz_data = gzip.compress(tar_data)
     return _write_to_path(tmp_path, "legitimate.tar.gz", gz_data)
+
+
+@pytest.fixture()
+def nested_tar_archive(tmp_path):
+    """A tar archive containing a nested tar archive.
+
+    Outer: root.tar
+      - inner.tar (contains: inner_file.txt)
+      - outer_file.txt
+    """
+
+    def build_outer(tf):
+        inner_buf = io.BytesIO()
+        with tarfile.open(fileobj=inner_buf, mode="w") as inner_tf:
+            _add_regular(inner_tf, "inner_file.txt", b"Content from inner tar\n")
+        inner_data = inner_buf.getvalue()
+
+        _add_regular(tf, "inner.tar", inner_data)
+        _add_regular(tf, "outer_file.txt", b"Content from outer tar\n")
+
+    return _write_to_path(tmp_path, "nested.tar", _tar_bytes(build_outer))
+
+
+@pytest.fixture()
+def nested_gz_archive(tmp_path):
+    """A tar archive containing a nested .tar.gz archive.
+
+    Outer: root.tar
+      - inner.tar.gz (contains: inner_file.txt)
+      - outer_file.txt
+    """
+
+    def build_outer(tf):
+        inner_buf = io.BytesIO()
+        with tarfile.open(fileobj=inner_buf, mode="w") as inner_tf:
+            _add_regular(inner_tf, "inner_file.txt", b"Content from inner gz tar\n")
+        inner_tar = inner_buf.getvalue()
+        inner_gz = gzip.compress(inner_tar)
+
+        _add_regular(tf, "inner.tar.gz", inner_gz)
+        _add_regular(tf, "outer_file.txt", b"Content from outer tar\n")
+
+    return _write_to_path(
+        tmp_path, "nested.tar.gz", gzip.compress(_tar_bytes(build_outer))
+    )
+
+
+@pytest.fixture()
+def double_nested_tar_archive(tmp_path):
+    """A tar archive containing two levels of nested tar archives.
+
+    Outer: root.tar
+      - level1.tar (contains level2.tar and level1_file.txt)
+        - level2.tar (contains level2_file.txt)
+    """
+
+    def build_level2(tf):
+        _add_regular(tf, "level2_file.txt", b"Content from level2\n")
+
+    level2_buf = io.BytesIO()
+    with tarfile.open(fileobj=level2_buf, mode="w") as tf:
+        build_level2(tf)
+    level2_data = level2_buf.getvalue()
+
+    def build_level1(tf):
+        _add_regular(tf, "level2.tar", level2_data)
+        _add_regular(tf, "level1_file.txt", b"Content from level1\n")
+
+    level1_buf = io.BytesIO()
+    with tarfile.open(fileobj=level1_buf, mode="w") as tf:
+        build_level1(tf)
+    level1_data = level1_buf.getvalue()
+
+    def build_outer(tf):
+        _add_regular(tf, "level1.tar", level1_data)
+        _add_regular(tf, "outer_file.txt", b"Content from outer\n")
+
+    return _write_to_path(tmp_path, "double_nested.tar", _tar_bytes(build_outer))

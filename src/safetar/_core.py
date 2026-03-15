@@ -58,6 +58,33 @@ from safetar._streamer import (
 
 log = logging.getLogger("safetar.security")
 
+_TAR_EXTENSIONS = (
+    ".tar.gz",
+    ".tar.bz2",
+    ".tar.xz",
+    ".tar.zst",
+    ".tgz",
+    ".tbz2",
+    ".txz",
+)
+
+
+def _tar_stem(name: str) -> str:
+    """Extract base name from tar archive filename, stripping all common extensions.
+
+    Examples:
+        inner.tar      -> inner
+        inner.tar.gz   -> inner
+        inner.tgz      -> inner
+        inner.tar.bz2  -> inner
+    """
+    for ext in _TAR_EXTENSIONS:
+        if name.lower().endswith(ext):
+            return name[: -len(ext)]
+    if name.lower().endswith(".tar"):
+        return name[:-4]
+    return name
+
 
 # ---- environment-variable configuration helpers ----------------------------
 # Each helper reads the relevant SAFETAR_* variable and returns its typed
@@ -125,6 +152,7 @@ def _env_sparse_policy() -> SparsePolicy:
 _DEFAULT_SYMLINK_POLICY: SymlinkPolicy = _env_symlink_policy()
 _DEFAULT_HARDLINK_POLICY: HardlinkPolicy = _env_hardlink_policy()
 _DEFAULT_SPARSE_POLICY: SparsePolicy = _env_sparse_policy()
+_DEFAULT_RECURSIVE: bool = _env_bool("SAFETAR_RECURSIVE", False)
 
 
 class SafeTarFile:
@@ -153,6 +181,10 @@ class SafeTarFile:
     :param clamp_timestamps: Clamp mtime to ``[0, 2**32 - 1]``.
     :param on_security_event: Optional callback invoked on every security
         event.
+    :param recursive: If ``True``, recursively extract nested tar archives
+        discovered during extraction. All security protections (size limits,
+        nesting depth limits, symlink/hardlink policies) are applied to
+        nested archives. Default ``False``.
     :param _nesting_depth: Internal nesting depth counter (not part of
         the public API).
     :raises ValueError: If a write mode (``"w"``, ``"a"``, ``"x"``) is
@@ -181,6 +213,7 @@ class SafeTarFile:
         preserve_ownership: bool = _env_bool("SAFETAR_PRESERVE_OWNERSHIP", False),
         clamp_timestamps: bool = _env_bool("SAFETAR_CLAMP_TIMESTAMPS", True),
         on_security_event: Callable[[SecurityEvent], None] | None = None,
+        recursive: bool = _DEFAULT_RECURSIVE,
         _nesting_depth: int = 0,
     ) -> None:
         # --- reject write modes ---
@@ -209,6 +242,7 @@ class SafeTarFile:
         self._preserve_ownership = preserve_ownership
         self._clamp_timestamps = clamp_timestamps
         self._on_security_event = on_security_event
+        self._recursive = recursive
         self._nesting_depth = _nesting_depth
 
         # --- ensure seekable input ---
@@ -429,8 +463,24 @@ class SafeTarFile:
 
         # ---- Streamer phase: regular file extraction ----
         extract_member_streaming(self._tf, info, dest_path, monitor)
-        self._apply_metadata(info, dest_path)
-        extracted_paths.add(dest_path)
+
+        # ---- Check for nested archive and extract recursively ----
+        # Must happen before _apply_metadata so the nested archive is readable
+        # regardless of the container file's final mode/owner.
+        # Returns True if the archive was extracted and deleted (nested archive),
+        # False if the file should be processed normally.
+        was_nested_extracted = self._maybe_extract_nested_archive(
+            dest_path,
+            base_dir,
+            monitor,
+            extracted_paths,
+        )
+
+        # Only apply metadata and track the path if the file wasn't deleted
+        # (i.e., it was either not a nested archive, or nested extraction failed)
+        if not was_nested_extracted:
+            self._apply_metadata(info, dest_path)
+            extracted_paths.add(dest_path)
 
     def _apply_metadata(self, info: tarfile.TarInfo, dest_path: Path) -> None:
         """Apply sanitised permissions, ownership, and timestamps.
@@ -470,6 +520,139 @@ class SafeTarFile:
         with contextlib.suppress(OSError):
             os.utime(dest_path, (mtime, mtime))
 
+    def _maybe_extract_nested_archive(
+        self,
+        extracted_path: Path,
+        base_dir: Path,
+        monitor: ExtractionMonitor,
+        extracted_paths: set[Path],
+    ) -> bool:
+        """Check if *extracted_path* is a nested tar archive and extract it.
+
+        Uses content-based detection via ``tarfile.is_tarfile()`` to avoid
+        extension-spoofing attacks. All security protections (size limits,
+        nesting depth, policies) are applied to nested archives.
+
+        Returns True if the archive was extracted and deleted (nested archive case),
+        False otherwise (normal file case).
+        """
+        if not self._recursive:
+            return False
+
+        if not extracted_path.is_file():
+            return False
+
+        if not tarfile.is_tarfile(extracted_path):
+            return False
+
+        self._extract_nested_archive(
+            extracted_path,
+            base_dir,
+            monitor,
+            extracted_paths,
+        )
+        return True
+
+    def _extract_nested_archive(
+        self,
+        archive_path: Path,
+        base_dir: Path,
+        monitor: ExtractionMonitor,
+        extracted_paths: set[Path],
+    ) -> None:
+        """Recursively extract a nested tar archive with full security protections.
+
+        Opens the nested archive using a new SafeTarFile instance with:
+        - Incremented nesting depth (enforces max_nesting_depth limit)
+        - Same security policies (symlink, hardlink, sparse)
+        - Same size/ratio limits
+        - Same metadata sanitisation settings
+        - Shared monitor for cumulative byte tracking
+
+        The nested archive is extracted into a subdirectory named after the archive
+        (without extension), matching the pattern used by safezip.
+        """
+        nested_dest = archive_path.parent / _tar_stem(archive_path.name)
+        if nested_dest.exists():
+            if nested_dest.is_dir():
+                pass  # OK - directory already exists
+            else:
+                raise MalformedArchiveError(
+                    f"Nested archive {archive_path.name!r} conflicts with "
+                    f"existing non-directory {nested_dest}. "
+                    "Archive may be malformed."
+                )
+        else:
+            nested_dest.mkdir(parents=True, exist_ok=False)
+
+        try:
+            nested_stf = SafeTarFile(
+                archive_path,
+                max_file_size=self._max_file_size,
+                max_total_size=self._max_total_size,
+                max_files=self._max_files,
+                max_ratio=self._max_ratio,
+                max_nesting_depth=self._max_nesting_depth,
+                symlink_policy=self._symlink_policy,
+                hardlink_policy=self._hardlink_policy,
+                sparse_policy=self._sparse_policy,
+                strip_special_bits=self._strip_special_bits,
+                strip_write_bits=self._strip_write_bits,
+                preserve_ownership=self._preserve_ownership,
+                clamp_timestamps=self._clamp_timestamps,
+                on_security_event=self._on_security_event,
+                recursive=True,
+                _nesting_depth=self._nesting_depth + 1,
+            )
+        except SafetarError:
+            raise
+        except Exception as exc:
+            raise MalformedArchiveError(
+                f"Failed to open nested archive {archive_path.name}: {exc}"
+            ) from exc
+
+        with nested_stf:
+            nested_stf.extractall_with_monitor(nested_dest, monitor, extracted_paths)
+
+        archive_path.unlink(missing_ok=True)
+
+    def extractall_with_monitor(
+        self,
+        path: str | os.PathLike[str],
+        monitor: ExtractionMonitor,
+        extracted_paths: set[Path],
+    ) -> None:
+        """Extract all members using a shared monitor for size tracking.
+
+        This is used for nested archive extraction where we need to share
+        the size monitor across all extractions.
+        """
+        base_dir = Path(path).resolve()
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        infos = self._tf.getmembers()
+
+        deferred_symlinks: list[tuple[Path, str]] = []
+        deferred_dirs: list[tuple[tarfile.TarInfo, Path]] = []
+
+        for info in infos:
+            self._extract_one(
+                info,
+                base_dir,
+                monitor,
+                deferred_symlinks,
+                deferred_dirs,
+                extracted_paths,
+            )
+
+        for sym_path, sym_target in deferred_symlinks:
+            verify_symlink_chain(base_dir, sym_path, sym_target)
+            sym_path.parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(sym_target, sym_path)
+
+        for dir_info, dir_path in deferred_dirs:
+            self._apply_metadata(dir_info, dir_path)
+
     def _fire_event(self, info: tarfile.TarInfo) -> None:
         """Invoke the on_security_event callback if configured."""
         if self._on_security_event is None:
@@ -505,6 +688,7 @@ def safe_extract(
     """Extract *archive* to *destination* using ``SafeTarFile`` defaults.
 
     All keyword arguments are forwarded to the ``SafeTarFile`` constructor.
+    Supports ``recursive=True`` to extract nested tar archives.
     """
     with SafeTarFile(archive, **kwargs) as stf:  # type: ignore[arg-type]
         stf.extractall(destination)

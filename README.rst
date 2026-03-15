@@ -119,6 +119,7 @@ Or use the ``SafeTarFile`` context manager for more control:
 
 Custom limits
 =============
+See the `Default limits`_ for reference.
 
 .. pytestfixture: file_tar_gz
 .. code-block:: python
@@ -128,14 +129,55 @@ Custom limits
 
     with SafeTarFile(
         "path/to/upload.tar.gz",
-        max_file_size=100 * 1024 * 1024,   # 100 MiB per member
-        max_total_size=500 * 1024 * 1024,   # 500 MiB total
-        max_files=1_000,
-        max_ratio=50.0,
-        symlink_policy=SymlinkPolicy.RESOLVE_INTERNAL,
-        hardlink_policy=HardlinkPolicy.INTERNAL,
+        max_file_size=100 * 1024 * 1024,          # 100 MiB per member (default: 1 GiB)
+        max_total_size=500 * 1024 * 1024,         # 500 MiB total (default: 5 GiB)
+        max_files=1_000,                          # (default: 10 000)
+        max_ratio=50.0,                           # (default: 200)
+        symlink_policy=SymlinkPolicy.IGNORE,      # (default: SymlinkPolicy.REJECT)
+        hardlink_policy=HardlinkPolicy.INTERNAL,  # (default: HardlinkPolicy.REJECT)
     ) as stf:
         stf.extractall("/var/files/extracted/")
+
+Recursive extraction
+====================
+
+When an archive contains nested ``.tar`` files, set ``recursive=True`` to
+descend into them automatically. All safety limits apply at every level. Each
+nested archive is extracted into a directory named after it (without the
+extension). The nested ``.tar`` file is removed from disk after recursive
+extraction (see ``_extract_nested_archive`` in ``_core.py``).
+
+.. pytestfixture: nested_tar_archive
+.. code-block:: python
+    :name: test_recursive_extraction
+
+    from safetar import SafeTarFile
+
+    # archive.tar
+    #   readme.txt
+    #   inner.tar          ← will be descended into, not extracted as a blob
+    #     inner_file.txt
+
+    with SafeTarFile("path/to/archive.tar.gz", recursive=True, max_nesting_depth=3) as stf:
+        stf.extractall("/var/files/extracted/")
+
+    # Result on disk:
+    #   /var/files/extracted/readme.txt
+    #   /var/files/extracted/inner/inner_file.txt
+
+By default, ``recursive=False`` and nested tar archives are extracted as
+regular files. When ``recursive=True``, safetar detects and extracts nested
+tar archives automatically using content-based
+detection (``tarfile.is_tarfile()``), avoiding extension-spoofing attacks.
+
+All security protections are applied to nested archives:
+
+- Nesting depth is enforced (``max_nesting_depth``)
+- File size limits apply across all nested extractions (``max_file_size``,
+  ``max_total_size``)
+- Symlink, hardlink, and sparse policies are enforced
+- Permission, ownership, and timestamp sanitisation is applied
+- All other security checks (path traversal, decompression bombs, etc.)
 
 Security event monitoring
 =========================
@@ -170,6 +212,8 @@ Default limits
 +--------------------------+------------------+
 | ``max_nesting_depth``    | 3                |
 +--------------------------+------------------+
+| ``recursive``            | False            |
++--------------------------+------------------+
 | ``symlink_policy``       | REJECT           |
 +--------------------------+------------------+
 | ``hardlink_policy``      | REJECT           |
@@ -185,6 +229,7 @@ Default limits
 
 Environment variable configuration
 ===================================
+See the `Default limits`_ for reference.
 
 Every default can be overridden at process start via environment variables,
 without modifying call sites.  Explicit constructor arguments always take
@@ -202,6 +247,8 @@ precedence over environment variables.
 | ``SAFETAR_MAX_RATIO``                 | ``max_ratio``             |
 +---------------------------------------+---------------------------+
 | ``SAFETAR_MAX_NESTING_DEPTH``         | ``max_nesting_depth``     |
++---------------------------------------+---------------------------+
+| ``SAFETAR_RECURSIVE``                 | ``recursive``             |
 +---------------------------------------+---------------------------+
 | ``SAFETAR_SYMLINK_POLICY``            | ``symlink_policy``        |
 +---------------------------------------+---------------------------+
@@ -222,6 +269,33 @@ variables accept ``1`` / ``true`` / ``yes`` / ``on`` (truthy) or
 Policy variables accept the lower-case enum value names (e.g.
 ``SAFETAR_SYMLINK_POLICY=resolve_internal``).  Unrecognised or unparseable
 values are silently ignored and the built-in default is used instead.
+
+CLI
+===
+
+``safetar`` ships with a CLI for quick extraction:
+
+.. code-block:: sh
+
+    # Extract an archive
+    safetar extract path/to/archive.tar.gz /var/files/extracted/
+
+    # List archive contents
+    safetar list path/to/archive.tar.gz
+
+    # Extract with custom limits
+    safetar extract archive.tar /output/ \
+        --max-file-size 104857600 \
+        --max-total-size 524288000 \
+        --max-files 1000
+
+    # Enable recursive extraction
+    safetar extract archive.tar /output/ --recursive
+
+    # Show help
+    safetar --help
+
+The CLI supports all the same security options as the Python API.
 
 Testing
 =======
