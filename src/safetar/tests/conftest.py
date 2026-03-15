@@ -479,4 +479,6 @@ def nested_gz_archive(tmp_path):
         _add_regular(tf, "inner.tar.gz", inner_gz)
         _add_regular(tf, "outer_file.txt", b"Content from outer tar\n")
 
-    return _write_to_path(tmp_path, "nested.tar.gz", _tar_bytes(build_outer))
+    return _write_to_path(
+        tmp_path, "nested.tar.gz", gzip.compress(_tar_bytes(build_outer))
+    )
