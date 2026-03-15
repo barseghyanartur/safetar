@@ -140,13 +140,28 @@ Custom limits
 Recursive extraction
 ====================
 
-.. pytestfixture: file_tar_gz
+When an archive contains nested ``.tar`` files, set ``recursive=True`` to
+descend into them automatically. All safety limits apply at every level. Each
+nested archive is extracted into a directory named after it (without the
+extension). The ``.tar`` file itself is never written to disk.
+
+.. pytestfixture: nested_tar_archive
 .. code-block:: python
     :name: test_recursive_extraction
 
-    from safetar import safe_extract
+    from safetar import SafeTarFile
 
-    safe_extract("path/to/archive.tar.gz", "/var/files/extracted/", recursive=True)
+    # archive.tar
+    #   readme.txt
+    #   inner.tar          ← will be descended into, not extracted as a blob
+    #     inner_file.txt
+
+    with SafeTarFile("path/to/archive.tar.gz", recursive=True, max_nesting_depth=3) as stf:
+        stf.extractall("/var/files/extracted/")
+
+    # Result on disk:
+    #   /var/files/extracted/readme.txt
+    #   /var/files/extracted/inner/inner_file.txt
 
 By default, ``recursive=False`` and nested tar archives are extracted as
 regular files. When ``recursive=True``, safetar detects and extracts nested

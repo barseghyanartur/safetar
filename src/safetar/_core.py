@@ -58,6 +58,33 @@ from safetar._streamer import (
 
 log = logging.getLogger("safetar.security")
 
+_TAR_EXTENSIONS = (
+    ".tar.gz",
+    ".tar.bz2",
+    ".tar.xz",
+    ".tar.zst",
+    ".tgz",
+    ".tbz2",
+    ".txz",
+)
+
+
+def _tar_stem(name: str) -> str:
+    """Extract base name from tar archive filename, stripping all common extensions.
+
+    Examples:
+        inner.tar      -> inner
+        inner.tar.gz   -> inner
+        inner.tgz      -> inner
+        inner.tar.bz2  -> inner
+    """
+    for ext in _TAR_EXTENSIONS:
+        if name.lower().endswith(ext):
+            return name[: -len(ext)]
+    if name.lower().endswith(".tar"):
+        return name[:-4]
+    return name
+
 
 # ---- environment-variable configuration helpers ----------------------------
 # Each helper reads the relevant SAFETAR_* variable and returns its typed
@@ -529,7 +556,13 @@ class SafeTarFile:
         - Same size/ratio limits
         - Same metadata sanitisation settings
         - Shared monitor for cumulative byte tracking
+
+        The nested archive is extracted into a subdirectory named after the archive
+        (without extension), matching the pattern used by safezip.
         """
+        nested_dest = archive_path.parent / _tar_stem(archive_path.name)
+        nested_dest.mkdir(parents=True, exist_ok=True)
+
         try:
             nested_stf = SafeTarFile(
                 archive_path,
@@ -557,7 +590,9 @@ class SafeTarFile:
             ) from exc
 
         with nested_stf:
-            nested_stf.extractall_with_monitor(base_dir, monitor, extracted_paths)
+            nested_stf.extractall_with_monitor(nested_dest, monitor, extracted_paths)
+
+        archive_path.unlink(missing_ok=True)
 
     def extractall_with_monitor(
         self,
