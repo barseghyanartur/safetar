@@ -171,3 +171,56 @@ class TestSingleMemberExtract:
             stf.extract("readme.txt", dest)
         assert (dest / "readme.txt").exists()
         assert not (dest / "data").exists()
+
+
+class TestRecursiveExtraction:
+    """Recursive tar archive extraction."""
+
+    def test_recursive_false_skips_nested(self, nested_tar_archive, tmp_path):
+        """When recursive=False (default), nested archives are not extracted."""
+        dest = tmp_path / "out"
+        with SafeTarFile(nested_tar_archive) as stf:
+            stf.extractall(dest)
+        assert (dest / "inner.tar").exists()
+        assert not (dest / "inner" / "inner_file.txt").exists()
+        assert (dest / "outer_file.txt").exists()
+
+    def test_recursive_extracts_nested_tar(self, nested_tar_archive, tmp_path):
+        """When recursive=True, nested tar archives are extracted."""
+        dest = tmp_path / "out"
+        with SafeTarFile(nested_tar_archive, recursive=True) as stf:
+            stf.extractall(dest)
+        assert (dest / "inner_file.txt").exists()
+        content = (dest / "inner_file.txt").read_bytes()
+        assert content == b"Content from inner tar\n"
+        assert (dest / "outer_file.txt").exists()
+
+    def test_recursive_extracts_nested_gz(self, nested_gz_archive, tmp_path):
+        """When recursive=True, nested .tar.gz archives are extracted."""
+        dest = tmp_path / "out"
+        with SafeTarFile(nested_gz_archive, recursive=True) as stf:
+            stf.extractall(dest)
+        assert (dest / "inner_file.txt").exists()
+        content = (dest / "inner_file.txt").read_bytes()
+        assert content == b"Content from inner gz tar\n"
+        assert (dest / "outer_file.txt").exists()
+
+    def test_recursive_nesting_depth_enforced(self, nested_tar_archive, tmp_path):
+        """max_nesting_depth is enforced on nested archives.
+
+        When _nesting_depth=2 exceeds max_nesting_depth=1, it should raise.
+        """
+        with pytest.raises(NestingDepthError):
+            SafeTarFile(
+                nested_tar_archive,
+                recursive=True,
+                max_nesting_depth=1,
+                _nesting_depth=2,
+            )
+
+    def test_recursive_safe_extract(self, nested_tar_archive, tmp_path):
+        """safe_extract() supports recursive=True via kwargs."""
+        dest = tmp_path / "out"
+        safe_extract(nested_tar_archive, dest, recursive=True)
+        assert (dest / "inner_file.txt").exists()
+        assert (dest / "outer_file.txt").exists()

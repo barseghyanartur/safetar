@@ -137,6 +137,31 @@ Custom limits
     ) as stf:
         stf.extractall("/var/files/extracted/")
 
+Recursive extraction
+====================
+
+.. pytestfixture: file_tar_gz
+.. code-block:: python
+    :name: test_recursive_extraction
+
+    from safetar import safe_extract
+
+    safe_extract("path/to/archive.tar.gz", "/var/files/extracted/", recursive=True)
+
+By default, ``recursive=False`` and nested tar archives are extracted as
+regular files. When ``recursive=True``, safetar detects and extracts nested
+tar archives automatically using content-based
+detection (``tarfile.is_tarfile()``), avoiding extension-spoofing attacks.
+
+All security protections are applied to nested archives:
+
+- Nesting depth is enforced (``max_nesting_depth``)
+- File size limits apply across all nested extractions (``max_file_size``,
+  ``max_total_size``)
+- Symlink, hardlink, and sparse policies are enforced
+- Permission, ownership, and timestamp sanitisation is applied
+- All other security checks (path traversal, decompression bombs, etc.)
+
 Security event monitoring
 =========================
 
@@ -170,6 +195,8 @@ Default limits
 +--------------------------+------------------+
 | ``max_nesting_depth``    | 3                |
 +--------------------------+------------------+
+| ``recursive``            | False            |
++--------------------------+------------------+
 | ``symlink_policy``       | REJECT           |
 +--------------------------+------------------+
 | ``hardlink_policy``      | REJECT           |
@@ -202,6 +229,8 @@ precedence over environment variables.
 | ``SAFETAR_MAX_RATIO``                 | ``max_ratio``             |
 +---------------------------------------+---------------------------+
 | ``SAFETAR_MAX_NESTING_DEPTH``         | ``max_nesting_depth``     |
++---------------------------------------+---------------------------+
+| ``SAFETAR_RECURSIVE``                 | ``recursive``             |
 +---------------------------------------+---------------------------+
 | ``SAFETAR_SYMLINK_POLICY``            | ``symlink_policy``        |
 +---------------------------------------+---------------------------+

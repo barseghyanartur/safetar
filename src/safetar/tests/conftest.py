@@ -437,3 +437,46 @@ def legitimate_gz_archive(tmp_path):
     tar_data = _tar_bytes(build)
     gz_data = gzip.compress(tar_data)
     return _write_to_path(tmp_path, "legitimate.tar.gz", gz_data)
+
+
+@pytest.fixture()
+def nested_tar_archive(tmp_path):
+    """A tar archive containing a nested tar archive.
+
+    Outer: root.tar
+      - inner.tar (contains: inner_file.txt)
+      - outer_file.txt
+    """
+
+    def build_outer(tf):
+        inner_buf = io.BytesIO()
+        with tarfile.open(fileobj=inner_buf, mode="w") as inner_tf:
+            _add_regular(inner_tf, "inner_file.txt", b"Content from inner tar\n")
+        inner_data = inner_buf.getvalue()
+
+        _add_regular(tf, "inner.tar", inner_data)
+        _add_regular(tf, "outer_file.txt", b"Content from outer tar\n")
+
+    return _write_to_path(tmp_path, "nested.tar", _tar_bytes(build_outer))
+
+
+@pytest.fixture()
+def nested_gz_archive(tmp_path):
+    """A tar archive containing a nested .tar.gz archive.
+
+    Outer: root.tar
+      - inner.tar.gz (contains: inner_file.txt)
+      - outer_file.txt
+    """
+
+    def build_outer(tf):
+        inner_buf = io.BytesIO()
+        with tarfile.open(fileobj=inner_buf, mode="w") as inner_tf:
+            _add_regular(inner_tf, "inner_file.txt", b"Content from inner gz tar\n")
+        inner_tar = inner_buf.getvalue()
+        inner_gz = gzip.compress(inner_tar)
+
+        _add_regular(tf, "inner.tar.gz", inner_gz)
+        _add_regular(tf, "outer_file.txt", b"Content from outer tar\n")
+
+    return _write_to_path(tmp_path, "nested.tar.gz", _tar_bytes(build_outer))
