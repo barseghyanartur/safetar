@@ -267,6 +267,33 @@ Policy variables accept the lower-case enum value names (e.g.
 ``SAFETAR_SYMLINK_POLICY=resolve_internal``).  Unrecognised or unparseable
 values are silently ignored and the built-in default is used instead.
 
+CLI
+===
+
+``safetar`` ships with a CLI for quick extraction:
+
+.. code-block:: sh
+
+    # Extract an archive
+    safetar extract path/to/archive.tar.gz /var/files/extracted/
+
+    # List archive contents
+    safetar list path/to/archive.tar.gz
+
+    # Extract with custom limits
+    safetar extract archive.tar /output/ \
+        --max-file-size 104857600 \
+        --max-total-size 524288000 \
+        --max-files 1000
+
+    # Enable recursive extraction
+    safetar extract archive.tar /output/ --recursive
+
+    # Show help
+    safetar --help
+
+The CLI supports all the same security options as the Python API.
+
 Testing
 =======
 

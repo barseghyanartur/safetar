@@ -6,7 +6,7 @@ Secure by default.  Zero dependencies.  Python 3.10+.
 from __future__ import annotations
 
 __title__ = "safetar"
-__version__ = "0.1"
+__version__ = "0.1.1"
 __author__ = "Artur Barseghyan <artur.barseghyan@gmail.com>"
 __copyright__ = "2026 Artur Barseghyan"
 __license__ = "MIT"
