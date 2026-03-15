@@ -20,7 +20,6 @@ __all__ = (
     "sanitise_mtime",
 )
 
-import contextlib
 import os
 import stat
 import time
@@ -119,41 +118,51 @@ def verify_symlink_chain(
     symlink_path: Path,
     symlink_target: str,
     *,
+    pending: dict[Path, str] | None = None,
     max_follow: int = 10,
 ) -> None:
     """Verify that the entire symlink chain stays inside *base_dir*.
 
     *symlink_path* is where the symlink will be created.
     *symlink_target* is the raw target string from the archive entry.
+    *pending* is an optional dict mapping not-yet-created symlink paths to their
+    targets, allowing chain verification through the deferred batch.
 
     Each link in the chain is resolved iteratively.  If any link
     exits *base_dir*, ``UnsafeEntryError`` is raised.  A chain longer
     than *max_follow* hops is also rejected (infinite-loop guard).
     """
+    if pending is None:
+        pending = {}
     base = base_dir.resolve()
 
-    # Resolve the immediate target relative to the symlink's parent.
-    current = symlink_path.parent / symlink_target
-    with contextlib.suppress(OSError):
-        current = current.resolve()  # parent doesn't exist yet; check raw path
-
-    if not (current == base or str(current).startswith(str(base) + os.sep)):
-        raise UnsafeEntryError(
-            f"Symlink target escapes extraction root: {symlink_target!r}"
-        )
-
-    # Follow further links in the chain.
-    for _ in range(max_follow):
-        if not current.is_symlink():
-            return  # end of chain — all good
-        link_target = os.readlink(current)
-        current = (current.parent / link_target).resolve()
-        if not (current == base or str(current).startswith(str(base) + os.sep)):
+    def _resolve(current: Path, target: str, depth: int) -> Path:
+        if depth > max_follow:
             raise UnsafeEntryError(
-                f"Symlink chain escapes extraction root at: {current!r}"
+                f"Symlink chain exceeds maximum depth ({max_follow})"
+            )
+        candidate = current.parent / target
+        try:
+            candidate = Path(os.path.normpath(candidate))
+        except ValueError as err:
+            raise UnsafeEntryError(
+                f"Symlink target cannot be normalised: {target!r}"
+            ) from err
+
+        if not (candidate == base or str(candidate).startswith(str(base) + os.sep)):
+            raise UnsafeEntryError(
+                f"Symlink target escapes extraction root: {target!r}"
             )
 
-    raise UnsafeEntryError(f"Symlink chain exceeds maximum depth ({max_follow})")
+        if candidate in pending:
+            return _resolve(candidate, pending[candidate], depth + 1)
+
+        if candidate.is_symlink():
+            return _resolve(candidate, os.readlink(candidate), depth + 1)
+
+        return candidate
+
+    _resolve(symlink_path, symlink_target, 0)
 
 
 # ---- hardlink verification ------------------------------------------------
