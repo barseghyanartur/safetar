@@ -154,6 +154,31 @@ def verify_symlink_chain(
                 f"Symlink target escapes extraction root: {target!r}"
             )
 
+        try:
+            rel_parts = candidate.relative_to(base).parts
+        except ValueError as err:
+            raise UnsafeEntryError(
+                f"Symlink target escapes extraction root: {target!r}"
+            ) from err
+
+        accumulated = base
+        for i, part in enumerate(rel_parts[:-1]):
+            accumulated = accumulated / part
+            suffix_parts = rel_parts[i + 1 :]
+
+            if accumulated in pending:
+                new_target = str(Path(*suffix_parts)) if suffix_parts else "."
+                return _resolve(accumulated, new_target, depth + 1)
+
+            if accumulated.is_symlink():
+                link_target = os.readlink(accumulated)
+                new_target = (
+                    str(Path(link_target).joinpath(*suffix_parts))
+                    if suffix_parts
+                    else link_target
+                )
+                return _resolve(accumulated.parent, new_target, depth + 1)
+
         if candidate in pending:
             return _resolve(candidate, pending[candidate], depth + 1)
 

@@ -392,12 +392,18 @@ class SafeTarFile:
                 extracted_paths,
             )
 
-        # --- deferred symlink creation (TOCTOU defence) ---
+        # --- deferred symlink / RESOLVE_INTERNAL creation (TOCTOU defence) ---
         pending: dict[Path, str] = dict(deferred_symlinks)
         for sym_path, sym_target in deferred_symlinks:
             verify_symlink_chain(base_dir, sym_path, sym_target, pending=pending)
             sym_path.parent.mkdir(parents=True, exist_ok=True)
-            os.symlink(sym_target, sym_path)
+            # RESOLVE_INTERNAL policy: create a regular file containing the target
+            # path as bytes (not a real OS symlink). Other policies would create
+            # real symlinks.
+            if self._symlink_policy == SymlinkPolicy.RESOLVE_INTERNAL:
+                sym_path.write_bytes(sym_target.encode())
+            else:
+                os.symlink(sym_target, sym_path)
             pending.pop(sym_path, None)
 
         # --- deferred directory metadata (after all files extracted) ---
