@@ -235,6 +235,22 @@ def symlink_internal_archive(tmp_path):
     return _write_to_path(tmp_path, "symlink_internal.tar", _tar_bytes(build))
 
 
+@pytest.fixture()
+def symlink_via_preexisting_dir_archive(tmp_path):
+    """Archive with a symlink whose target traverses a pre-existing symlinked dir.
+
+    The archive entry target is 'evil_dir/payload.txt'.
+    If the extraction root contains a pre-existing 'evil_dir' symlink pointing
+    outside the root, this target would escape without intermediate-component
+    checking.
+    """
+
+    def build(tf):
+        _add_symlink(tf, "link_via_dir", "evil_dir/payload.txt")
+
+    return _write_to_path(tmp_path, "via_preexisting_dir.tar", _tar_bytes(build))
+
+
 # ---------------------------------------------------------------------------
 # hardlink archives
 # ---------------------------------------------------------------------------

@@ -6,8 +6,10 @@ __author__ = "Artur Barseghyan <artur.barseghyan@gmail.com>"
 __copyright__ = "2026 Artur Barseghyan"
 __license__ = "MIT"
 
+import io
 import os
 import stat
+import tarfile
 
 import pytest
 
@@ -200,6 +202,53 @@ class TestSymlinkPolicy:
             ) as stf,
         ):
             stf.extractall(dest)
+
+    def test_resolve_internal_rejects_escape_via_preexisting_symlinked_dir(
+        self, symlink_via_preexisting_dir_archive, tmp_path
+    ):
+        """Escape through a pre-existing on-disk symlinked directory is rejected."""
+        dest = tmp_path / "out"
+        dest.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (dest / "evil_dir").symlink_to(outside)
+
+        with (
+            pytest.raises(UnsafeEntryError),
+            SafeTarFile(
+                symlink_via_preexisting_dir_archive,
+                symlink_policy=SymlinkPolicy.RESOLVE_INTERNAL,
+            ) as stf,
+        ):
+            stf.extractall(dest)
+
+    def test_resolve_internal_accepts_legitimate_nested_target(self, tmp_path):
+        """A target through a real (non-symlinked) subdirectory is accepted."""
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tf:
+            info = tarfile.TarInfo(name="subdir/")
+            info.type = tarfile.DIRTYPE
+            tf.addfile(info)
+            info2 = tarfile.TarInfo(name="subdir/target.txt")
+            data = b"content\n"
+            info2.size = len(data)
+            tf.addfile(info2, io.BytesIO(data))
+            info3 = tarfile.TarInfo(name="link_to_nested")
+            info3.type = tarfile.SYMTYPE
+            info3.linkname = "subdir/target.txt"
+            tf.addfile(info3)
+
+        archive = tmp_path / "nested_legit.tar"
+        archive.write_bytes(buf.getvalue())
+        dest = tmp_path / "out"
+
+        with SafeTarFile(
+            str(archive), symlink_policy=SymlinkPolicy.RESOLVE_INTERNAL
+        ) as stf:
+            stf.extractall(dest)
+
+        assert (dest / "link_to_nested").is_file()
+        assert (dest / "subdir" / "target.txt").exists()
 
 
 class TestHardlinkPolicy:
