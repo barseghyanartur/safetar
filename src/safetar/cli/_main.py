@@ -124,7 +124,7 @@ def _build_parser() -> argparse.ArgumentParser:
     ext.add_argument(
         "--recursive",
         action="store_true",
-        default=False,
+        default=None,
         help="Enable recursive extraction of nested tar archives.",
     )
 
