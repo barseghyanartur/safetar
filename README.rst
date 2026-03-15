@@ -144,7 +144,8 @@ Recursive extraction
 When an archive contains nested ``.tar`` files, set ``recursive=True`` to
 descend into them automatically. All safety limits apply at every level. Each
 nested archive is extracted into a directory named after it (without the
-extension). The ``.tar`` file itself is never written to disk.
+extension). The nested ``.tar`` file is removed from disk after recursive
+extraction (see ``_extract_nested_archive`` in ``_core.py``).
 
 .. pytestfixture: nested_tar_archive
 .. code-block:: python
