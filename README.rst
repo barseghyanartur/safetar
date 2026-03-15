@@ -119,6 +119,7 @@ Or use the ``SafeTarFile`` context manager for more control:
 
 Custom limits
 =============
+See the `Default limits`_ for reference.
 
 .. pytestfixture: file_tar_gz
 .. code-block:: python
@@ -128,12 +129,12 @@ Custom limits
 
     with SafeTarFile(
         "path/to/upload.tar.gz",
-        max_file_size=100 * 1024 * 1024,   # 100 MiB per member
-        max_total_size=500 * 1024 * 1024,   # 500 MiB total
-        max_files=1_000,
-        max_ratio=50.0,
-        symlink_policy=SymlinkPolicy.RESOLVE_INTERNAL,
-        hardlink_policy=HardlinkPolicy.INTERNAL,
+        max_file_size=100 * 1024 * 1024,          # 100 MiB per member (default: 1 GiB)
+        max_total_size=500 * 1024 * 1024,         # 500 MiB total (default: 5 GiB)
+        max_files=1_000,                          # (default: 10 000)
+        max_ratio=50.0,                           # (default: 200)
+        symlink_policy=SymlinkPolicy.IGNORE,      # (default: SymlinkPolicy.REJECT)
+        hardlink_policy=HardlinkPolicy.INTERNAL,  # (default: HardlinkPolicy.REJECT)
     ) as stf:
         stf.extractall("/var/files/extracted/")
 
@@ -227,6 +228,7 @@ Default limits
 
 Environment variable configuration
 ===================================
+See the `Default limits`_ for reference.
 
 Every default can be overridden at process start via environment variables,
 without modifying call sites.  Explicit constructor arguments always take
