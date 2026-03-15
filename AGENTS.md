@@ -304,7 +304,7 @@ not touch the host filesystem.
 
 ### Test layout
 
-```
+```text
 src/safetar/tests/
     conftest.py          — all archive fixtures (add new ones here)
     test_guard.py        — Phase A tests

@@ -31,7 +31,7 @@ are used for versioning (schema follows below):
   support for all security limits, passwords, symlink policies, and
   recursive mode.
 - **Nesting protection**: `max_nesting_depth` guard + `NestingDepthError`
-  prevents deep zip-bomb recursion.
+  prevents deep tar-bomb recursion.
 - **Docs & tests**: Updated README.rst/AGENTS.md with examples,
   complete CLI + recursive integration test suites.
 - **Misc**: Simplified `Makefile`, `.gitignore` cleanup.
