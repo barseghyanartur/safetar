@@ -107,6 +107,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Preserve setuid/setgid/sticky bits on extracted files.",
     )
     ext.add_argument(
+        "--no-strip-write-bits",
+        action="store_true",
+        help="Preserve write bits (owner/group/other) on extracted files.",
+    )
+    ext.add_argument(
         "--preserve-ownership",
         action="store_true",
         help="Preserve archived UID/GID (requires root).",
@@ -164,6 +169,9 @@ def _cmd_extract(args: argparse.Namespace) -> int:
 
     if args.no_strip_special_bits:
         kwargs["strip_special_bits"] = False
+
+    if args.no_strip_write_bits:
+        kwargs["strip_write_bits"] = False
 
     if args.preserve_ownership:
         kwargs["preserve_ownership"] = True
