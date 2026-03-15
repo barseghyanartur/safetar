@@ -52,5 +52,5 @@ def nested_tar_archive(tmp_path):
 
     p = Path("path/to") / "archive.tar.gz"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_bytes(outer_buf.getvalue())
+    p.write_bytes(gzip.compress(outer_buf.getvalue()))
     return p
