@@ -218,15 +218,21 @@ symlink/hardlink/sparse policies, and all sanitisation apply recursively.
 
 ## 5. Known Intentional Behaviors — Do Not Treat as Bugs
 
-### RESOLVE_INTERNAL extracts symlink entries as regular files
+### RESOLVE_INTERNAL creates real OS symlinks via a deferred batch
 
-TAR entries flagged as symlinks (via type `SYMTYPE`) are written as regular
-files containing the link target path as bytes. Python's `tarfile` does not
-create OS symlinks during extraction. The `verify_symlink_chain` function
-in `_sandbox.py` is only used for post-extraction symlink verification.
+TAR entries flagged as symlinks (via type `SYMTYPE`) are collected during the
+extraction loop and created as **real OS symlinks** after all regular files
+have been extracted. This two-phase approach is a deliberate TOCTOU defence:
+no symlink exists on disk during the extraction of other members, so a racing
+reader cannot traverse a partially-created chain to reach an unvalidated target.
 
-This is **safe**: a regular file containing the text `"../escape.txt"` is
-harmless.
+The deferred batch lives in `deferred_symlinks: list[tuple[Path, str]]` inside
+`extractall` (and `extractall_with_monitor`). After the main loop, each entry
+is verified with `verify_symlink_chain` and then created with `os.symlink`.
+
+**What this means for agents**: If you see a test or code path that expects
+`RESOLVE_INTERNAL` to produce a regular file, it is wrong. The output is always
+a real symlink (`Path.is_symlink() == True`).
 
 ### compress_size == 0 skips the ratio check — this is correct
 

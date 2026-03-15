@@ -62,26 +62,30 @@ _TAR_EXTENSIONS = (
     ".tar.gz",
     ".tar.bz2",
     ".tar.xz",
-    ".tar.zst",
+    ".tar.lzma",
     ".tgz",
     ".tbz2",
     ".txz",
+    ".tlz",
 )
 
 
 def _tar_stem(name: str) -> str:
-    """Extract base name from tar archive filename, stripping all common extensions.
+    """Extract base name from tar archive filename, stripping all known extensions.
+
+    Only extensions openable by Python's stdlib ``tarfile`` module are included.
 
     Examples:
-        inner.tar      -> inner
+        inner.tar       -> inner
         inner.tar.gz   -> inner
+        inner.tar.lzma -> inner
         inner.tgz      -> inner
-        inner.tar.bz2  -> inner
     """
+    lower = name.lower()
     for ext in _TAR_EXTENSIONS:
-        if name.lower().endswith(ext):
+        if lower.endswith(ext):
             return name[: -len(ext)]
-    if name.lower().endswith(".tar"):
+    if lower.endswith(".tar"):
         return name[:-4]
     return name
 
@@ -115,7 +119,14 @@ def _env_bool(name: str, fallback: bool) -> bool:
     raw = os.environ.get(name)
     if raw is None:
         return fallback
-    return raw.lower() not in ("0", "false", "no", "off", "")
+    normalised = raw.lower()
+    if normalised in ("1", "true", "yes", "on"):
+        return True
+    if normalised in ("0", "false", "no", "off", ""):
+        return False
+    # Unrecognised value — silently ignore and use the built-in default,
+    # consistent with _env_int, _env_float, and the policy parsers.
+    return fallback
 
 
 def _env_symlink_policy() -> SymlinkPolicy:
@@ -346,29 +357,7 @@ class SafeTarFile:
             archive_size=self._archive_size,
         )
 
-        deferred_symlinks: list[tuple[Path, str]] = []
-        deferred_dirs: list[tuple[tarfile.TarInfo, Path]] = []
-        extracted_paths: set[Path] = set()
-
-        for info in infos:
-            self._extract_one(
-                info,
-                base_dir,
-                monitor,
-                deferred_symlinks,
-                deferred_dirs,
-                extracted_paths,
-            )
-
-        # --- deferred symlink creation (TOCTOU defence) ---
-        for sym_path, sym_target in deferred_symlinks:
-            verify_symlink_chain(base_dir, sym_path, sym_target)
-            sym_path.parent.mkdir(parents=True, exist_ok=True)
-            os.symlink(sym_target, sym_path)
-
-        # --- deferred directory metadata (after all files extracted) ---
-        for dir_info, dir_path in deferred_dirs:
-            self._apply_metadata(dir_info, dir_path)
+        self._extractall_inner(base_dir, infos, monitor, extracted_paths=set())
 
     def extract(
         self,
@@ -381,6 +370,39 @@ class SafeTarFile:
         self.extractall(path, members=[member])
 
     # ---- internal ----------------------------------------------------------
+
+    def _extractall_inner(
+        self,
+        base_dir: Path,
+        infos: list[tarfile.TarInfo],
+        monitor: ExtractionMonitor,
+        extracted_paths: set[Path],
+    ) -> None:
+        """Core extraction loop shared by extractall and extractall_with_monitor."""
+        deferred_symlinks: list[tuple[Path, str]] = []
+        deferred_dirs: list[tuple[tarfile.TarInfo, Path]] = []
+
+        for info in infos:
+            self._extract_one(
+                info,
+                base_dir,
+                monitor,
+                deferred_symlinks,
+                deferred_dirs,
+                extracted_paths,
+            )
+
+        # --- deferred symlink creation (TOCTOU defence) ---
+        pending: dict[Path, str] = dict(deferred_symlinks)
+        for sym_path, sym_target in deferred_symlinks:
+            verify_symlink_chain(base_dir, sym_path, sym_target, pending=pending)
+            sym_path.parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(sym_target, sym_path)
+            pending.pop(sym_path, None)
+
+        # --- deferred directory metadata (after all files extracted) ---
+        for dir_info, dir_path in deferred_dirs:
+            self._apply_metadata(dir_info, dir_path)
 
     def _extract_one(
         self,
@@ -629,29 +651,8 @@ class SafeTarFile:
         """
         base_dir = Path(path).resolve()
         base_dir.mkdir(parents=True, exist_ok=True)
-
         infos = self._tf.getmembers()
-
-        deferred_symlinks: list[tuple[Path, str]] = []
-        deferred_dirs: list[tuple[tarfile.TarInfo, Path]] = []
-
-        for info in infos:
-            self._extract_one(
-                info,
-                base_dir,
-                monitor,
-                deferred_symlinks,
-                deferred_dirs,
-                extracted_paths,
-            )
-
-        for sym_path, sym_target in deferred_symlinks:
-            verify_symlink_chain(base_dir, sym_path, sym_target)
-            sym_path.parent.mkdir(parents=True, exist_ok=True)
-            os.symlink(sym_target, sym_path)
-
-        for dir_info, dir_path in deferred_dirs:
-            self._apply_metadata(dir_info, dir_path)
+        self._extractall_inner(base_dir, infos, monitor, extracted_paths)
 
     def _fire_event(self, info: tarfile.TarInfo) -> None:
         """Invoke the on_security_event callback if configured."""
