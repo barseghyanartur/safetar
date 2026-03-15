@@ -467,15 +467,20 @@ class SafeTarFile:
         # ---- Check for nested archive and extract recursively ----
         # Must happen before _apply_metadata so the nested archive is readable
         # regardless of the container file's final mode/owner.
-        self._maybe_extract_nested_archive(
+        # Returns True if the archive was extracted and deleted (nested archive),
+        # False if the file should be processed normally.
+        was_nested_extracted = self._maybe_extract_nested_archive(
             dest_path,
             base_dir,
             monitor,
             extracted_paths,
         )
 
-        self._apply_metadata(info, dest_path)
-        extracted_paths.add(dest_path)
+        # Only apply metadata and track the path if the file wasn't deleted
+        # (i.e., it was either not a nested archive, or nested extraction failed)
+        if not was_nested_extracted:
+            self._apply_metadata(info, dest_path)
+            extracted_paths.add(dest_path)
 
     def _apply_metadata(self, info: tarfile.TarInfo, dest_path: Path) -> None:
         """Apply sanitised permissions, ownership, and timestamps.
@@ -521,21 +526,24 @@ class SafeTarFile:
         base_dir: Path,
         monitor: ExtractionMonitor,
         extracted_paths: set[Path],
-    ) -> None:
+    ) -> bool:
         """Check if *extracted_path* is a nested tar archive and extract it.
 
         Uses content-based detection via ``tarfile.is_tarfile()`` to avoid
         extension-spoofing attacks. All security protections (size limits,
         nesting depth, policies) are applied to nested archives.
+
+        Returns True if the archive was extracted and deleted (nested archive case),
+        False otherwise (normal file case).
         """
         if not self._recursive:
-            return
+            return False
 
         if not extracted_path.is_file():
-            return
+            return False
 
         if not tarfile.is_tarfile(extracted_path):
-            return
+            return False
 
         self._extract_nested_archive(
             extracted_path,
@@ -543,6 +551,7 @@ class SafeTarFile:
             monitor,
             extracted_paths,
         )
+        return True
 
     def _extract_nested_archive(
         self,
