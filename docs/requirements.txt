@@ -222,7 +222,7 @@ restructuredtext-lint==2.0.2
     # via doc8
 rfc3986==2.0.0
     # via twine
-rich==14.3.2
+rich==15.0.0
     # via twine
 roman-numerals==4.1.0
     # via sphinx
