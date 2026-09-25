@@ -282,7 +282,7 @@ traitlets==5.14.3
     # via
     #   ipython
     #   matplotlib-inline
-twine==6.2.0
+twine==7.0.0
     # via pytest-codeblock (pyproject.toml)
 typing-extensions==4.15.0
     # via
