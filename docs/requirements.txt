@@ -132,7 +132,7 @@ more-itertools==10.8.0
     #   jaraco-functools
 moto==5.1.21
     # via pytest-codeblock (pyproject.toml)
-mypy==1.19.1
+mypy==2.3.1
     # via pytest-codeblock (pyproject.toml)
 mypy-extensions==1.1.0
     # via mypy
