@@ -42,4 +42,4 @@ jobs:
           mkdir -p path/to && chmod 777 path/to
           sudo mkdir -p /var/files/extracted
           sudo chmod 777 /var/files/extracted
-          pytest -vrx
+          pytest -vrx -o addopts=""
